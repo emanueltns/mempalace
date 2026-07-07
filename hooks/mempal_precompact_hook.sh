@@ -58,8 +58,34 @@ MEMPAL_DIR=""
 INPUT=$(cat)
 
 SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id','unknown'))" 2>/dev/null)
+TRANSCRIPT=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('transcript_path',''))" 2>/dev/null)
 
 echo "[$(date '+%H:%M:%S')] PRE-COMPACT triggered for session $SESSION_ID" >> "$STATE_DIR/hook.log"
+
+# Stamp the compaction time so the context watchdog gives a grace window after
+# a compact/clear instead of nagging immediately (context_watchdog.sh reads it).
+date +%s > "$STATE_DIR/last_compact_ts" 2>/dev/null
+
+# Record the transcript byte size at compaction. The transcript .jsonl NEVER
+# shrinks on /compact (compaction replaces the in-context history, not the
+# file), so the watchdog must estimate from bytes ADDED SINCE the last compact,
+# not total bytes -- otherwise it false-positives forever after one compact
+# (seen 2026-07-03: file said 665k, real context was 157k).
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+    wc -c < "$TRANSCRIPT" > "$STATE_DIR/bytes_at_last_compact" 2>/dev/null
+fi
+
+# Raw, full-fidelity backup of the transcript BEFORE compaction. This is the
+# "save everything" half, done deterministically by the hook (a shell script
+# cannot distill into memory, but it CAN preserve the raw record). It sits on
+# top of the continuous distilled saves the Stop hook already does every turn,
+# so nothing is lost even though we no longer block.
+BACKUP_DIR="$STATE_DIR/backups"
+mkdir -p "$BACKUP_DIR"
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+    cp "$TRANSCRIPT" "$BACKUP_DIR/precompact-${SESSION_ID}-$(date '+%Y%m%d-%H%M%S').jsonl" 2>/dev/null \
+        && echo "[$(date '+%H:%M:%S')] raw transcript backed up before compaction" >> "$STATE_DIR/hook.log"
+fi
 
 # Optional: run mempalace ingest synchronously so memories land before compaction
 if [ -n "$MEMPAL_DIR" ] && [ -d "$MEMPAL_DIR" ]; then
@@ -68,10 +94,11 @@ if [ -n "$MEMPAL_DIR" ] && [ -d "$MEMPAL_DIR" ]; then
     python3 -m mempalace mine "$MEMPAL_DIR" >> "$STATE_DIR/hook.log" 2>&1
 fi
 
-# Always block — compaction = save everything
-cat << 'HOOKJSON'
-{
-  "decision": "block",
-  "reason": "COMPACTION IMMINENT. Save ALL topics, decisions, quotes, code, and important context from this session to your memory system. Be thorough — after compaction, detailed context will be lost. Organize into appropriate categories. Use verbatim quotes where possible. Save everything, then allow compaction to proceed."
-}
-HOOKJSON
+# ALLOW compaction to proceed (changed 2026-07-02 from always-block, per owner:
+# "save everything then compact, so we don't use too many tokens"). The
+# conversation is already saved two ways -- (1) the Stop hook distills to the
+# memory .md files every turn, so memory is always current; (2) the raw
+# transcript backup above -- so there is nothing to block for. Exit 0 with no
+# "decision":"block" lets Claude Code compact and free the context window,
+# which is the whole point.
+exit 0

@@ -86,6 +86,23 @@ def _no_palace():
     }
 
 
+def _iter_metadatas(col, where=None, batch=5000):
+    """Page through all drawer metadatas; a single col.get caps at its limit,
+    which silently hid wings once the palace grew past 10k drawers."""
+    offset = 0
+    while True:
+        kwargs = {"include": ["metadatas"], "limit": batch, "offset": offset}
+        if where:
+            kwargs["where"] = where
+        metas = col.get(**kwargs)["metadatas"]
+        if not metas:
+            return
+        yield from metas
+        if len(metas) < batch:
+            return
+        offset += batch
+
+
 # ==================== READ TOOLS ====================
 
 
@@ -97,8 +114,7 @@ def tool_status():
     wings = {}
     rooms = {}
     try:
-        all_meta = col.get(include=["metadatas"], limit=10000)["metadatas"]
-        for m in all_meta:
+        for m in _iter_metadatas(col):
             w = m.get("wing", "unknown")
             r = m.get("room", "unknown")
             wings[w] = wings.get(w, 0) + 1
@@ -154,8 +170,7 @@ def tool_list_wings():
         return _no_palace()
     wings = {}
     try:
-        all_meta = col.get(include=["metadatas"], limit=10000)["metadatas"]
-        for m in all_meta:
+        for m in _iter_metadatas(col):
             w = m.get("wing", "unknown")
             wings[w] = wings.get(w, 0) + 1
     except Exception:
@@ -169,11 +184,7 @@ def tool_list_rooms(wing: str = None):
         return _no_palace()
     rooms = {}
     try:
-        kwargs = {"include": ["metadatas"], "limit": 10000}
-        if wing:
-            kwargs["where"] = {"wing": wing}
-        all_meta = col.get(**kwargs)["metadatas"]
-        for m in all_meta:
+        for m in _iter_metadatas(col, where={"wing": wing} if wing else None):
             r = m.get("room", "unknown")
             rooms[r] = rooms.get(r, 0) + 1
     except Exception:
@@ -187,8 +198,7 @@ def tool_get_taxonomy():
         return _no_palace()
     taxonomy = {}
     try:
-        all_meta = col.get(include=["metadatas"], limit=10000)["metadatas"]
-        for m in all_meta:
+        for m in _iter_metadatas(col):
             w = m.get("wing", "unknown")
             r = m.get("room", "unknown")
             if w not in taxonomy:

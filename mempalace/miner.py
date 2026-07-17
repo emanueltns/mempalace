@@ -667,9 +667,17 @@ def status(palace_path: str):
         print("  Run: mempalace init <dir> then mempalace mine <dir>")
         return
 
-    # Count by wing and room
-    r = col.get(limit=10000, include=["metadatas"])
-    metas = r["metadatas"]
+    # Count by wing and room, paging past chroma's per-call get limit
+    metas = []
+    offset = 0
+    while True:
+        batch = col.get(limit=5000, offset=offset, include=["metadatas"])["metadatas"]
+        if not batch:
+            break
+        metas.extend(batch)
+        if len(batch) < 5000:
+            break
+        offset += 5000
 
     wing_rooms = defaultdict(lambda: defaultdict(int))
     for m in metas:

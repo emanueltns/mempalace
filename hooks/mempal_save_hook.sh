@@ -138,7 +138,7 @@ if [ "$SINCE_LAST" -ge "$SAVE_INTERVAL" ] && [ "$EXCHANGE_COUNT" -gt 0 ]; then
     cat << 'HOOKJSON'
 {
   "decision": "block",
-  "reason": "AUTO-SAVE checkpoint. Save key topics, decisions, quotes, and code from this session to your memory system. Organize into appropriate categories. Use verbatim quotes where possible. Continue conversation after saving."
+  "reason": "AUTO-SAVE checkpoint. Save key topics, decisions, quotes, and code from this session to your memory system. Organize into appropriate categories. Use verbatim quotes where possible. ALSO: if the exchanges since the last save contained a correction the user made to you, a claim you retracted, a misunderstanding the user had to re-explain, or a mistake you caught — distill it into a feedback_* lesson file NOW, not just state notes; friction is the most valuable thing to save. Continue conversation after saving."
 }
 HOOKJSON
 else

@@ -123,7 +123,7 @@ echo "[$(date '+%H:%M:%S')] Session $SESSION_ID: $EXCHANGE_COUNT exchanges, $SIN
 # FIRST, then recommend /compact). Reads the live context from the last
 # usage entry, mirroring context_watchdog.sh; nags at most once per
 # NUDGE_INTERVAL_S and never right after a compaction (last_compact_ts).
-CAP_TOKENS=${VB_CONTEXT_CAP_TOKENS:-400000}
+CAP_TOKENS=${VB_CONTEXT_CAP_TOKENS:-250000}
 NUDGE_INTERVAL_S=${VB_CONTEXT_NUDGE_INTERVAL_S:-1800}
 CONTEXT_EST=0
 if [ -f "$TRANSCRIPT_PATH" ]; then

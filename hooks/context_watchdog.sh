@@ -13,11 +13,11 @@
 # After a compaction the PreCompact hook stamps last_compact_ts; we stay quiet
 # for GRACE_S so we do not nag right after the user just compacted.
 #
-# Tunables (env): VB_CONTEXT_CAP_TOKENS (default 400000), VB_BYTES_PER_TOKEN
+# Tunables (env): VB_CONTEXT_CAP_TOKENS (default 250000), VB_BYTES_PER_TOKEN
 # (default 10), VB_CONTEXT_GRACE_S (default 600).
 set -uo pipefail
 
-CAP_TOKENS=${VB_CONTEXT_CAP_TOKENS:-400000}
+CAP_TOKENS=${VB_CONTEXT_CAP_TOKENS:-250000}
 BYTES_PER_TOKEN=${VB_BYTES_PER_TOKEN:-10}
 GRACE_S=${VB_CONTEXT_GRACE_S:-600}
 STATE_DIR="$HOME/.mempalace/hook_state"

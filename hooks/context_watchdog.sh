@@ -34,24 +34,31 @@ if [ -f "$TS_FILE" ]; then
     if [ $(( now - last )) -lt "$GRACE_S" ]; then exit 0; fi
 fi
 
-BYTES=$(wc -c < "$T" 2>/dev/null || echo 0)
-
-# The transcript file never shrinks on /compact (compaction replaces the
-# in-context history, not the file). Estimate from bytes ADDED since the last
-# compaction, plus a flat allowance for the compact summary carried forward.
-# Baseline is written by the PreCompact hook (bytes_at_last_compact).
-BASE_FILE="$STATE_DIR/bytes_at_last_compact"
-SUMMARY_ALLOWANCE_TOKENS=${VB_COMPACT_SUMMARY_TOKENS:-40000}
-if [ -f "$BASE_FILE" ]; then
-    base=$(cat "$BASE_FILE" 2>/dev/null | tr -dc '0-9')
-    base=${base:-0}
-    # A smaller file than the baseline means a different/new session: ignore it.
-    if [ "$base" -gt 0 ] && [ "$BYTES" -ge "$base" ]; then
-        EST=$(( (BYTES - base) / BYTES_PER_TOKEN + SUMMARY_ALLOWANCE_TOKENS ))
-    else
-        EST=$(( BYTES / BYTES_PER_TOKEN ))
-    fi
-else
+# PRECISE source first: every assistant entry in the transcript carries
+# message.usage; the LAST one's input+cache tokens IS the live context of the
+# most recent request (verified 2026-07-29: usage said 296k while the old
+# byte estimate claimed 2.47M on a tool-heavy session, an 8x overshoot that
+# nagged /compact at 29% of a 1M window). Bytes/10 remains only as a fallback
+# for transcripts without usage entries.
+EST=$(python3 - "$T" <<'PYEOF' 2>/dev/null
+import json, sys
+last = 0
+with open(sys.argv[1]) as f:
+    for line in f:
+        try:
+            u = (json.loads(line).get("message") or {}).get("usage")
+        except Exception:
+            continue
+        if u and "input_tokens" in u:
+            last = (u.get("input_tokens", 0)
+                    + u.get("cache_read_input_tokens", 0)
+                    + u.get("cache_creation_input_tokens", 0))
+print(last)
+PYEOF
+)
+EST=${EST:-0}
+if [ "$EST" -le 0 ]; then
+    BYTES=$(wc -c < "$T" 2>/dev/null || echo 0)
     EST=$(( BYTES / BYTES_PER_TOKEN ))
 fi
 

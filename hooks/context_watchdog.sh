@@ -62,11 +62,17 @@ if [ "$EST" -le 0 ]; then
     EST=$(( BYTES / BYTES_PER_TOKEN ))
 fi
 
-if [ "$EST" -ge "$CAP_TOKENS" ]; then
+# Routine over-cap nudging now lives in the Stop hook (mempal_save_hook.sh):
+# it fires at the END of a turn, forces the memory save first, and only then
+# recommends /compact, so the user is never interrupted mid-exchange (owner
+# 2026-07-29: "should first check if we are active and wait for a response,
+# save then compact"). This prompt-time hook only screams on a true
+# emergency: double the soft cap.
+if [ "$EST" -ge $(( CAP_TOKENS * 2 )) ]; then
     K=$(( EST / 1000 ))
     CAPK=$(( CAP_TOKENS / 1000 ))
     cat <<EOF
-CONTEXT WATCHDOG: this interactive session is at roughly ${K}k tokens, over the ${CAPK}k soft cap. Confirm the latest state and decisions are in memory (the Stop hook does this each turn), then in ONE short sentence tell the user context is over the cap and recommend running /compact now (or /clear at a natural task boundary) to free tokens. Do not derail the user's actual request; answer it, and append the reminder.
+CONTEXT WATCHDOG (EMERGENCY): live context is ${K}k tokens, more than double the ${CAPK}k soft cap. Answer the user's request briefly, then urge running /compact in this same reply.
 EOF
 fi
 exit 0

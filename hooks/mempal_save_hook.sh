@@ -119,6 +119,62 @@ SINCE_LAST=$((EXCHANGE_COUNT - LAST_SAVE))
 # Log for debugging (check ~/.mempalace/hook_state/hook.log)
 echo "[$(date '+%H:%M:%S')] Session $SESSION_ID: $EXCHANGE_COUNT exchanges, $SINCE_LAST since last save" >> "$STATE_DIR/hook.log"
 
+# Over-cap check (owner 2026-07-29: nudge only at a turn boundary, save
+# FIRST, then recommend /compact). Reads the live context from the last
+# usage entry, mirroring context_watchdog.sh; nags at most once per
+# NUDGE_INTERVAL_S and never right after a compaction (last_compact_ts).
+CAP_TOKENS=${VB_CONTEXT_CAP_TOKENS:-400000}
+NUDGE_INTERVAL_S=${VB_CONTEXT_NUDGE_INTERVAL_S:-1800}
+CONTEXT_EST=0
+if [ -f "$TRANSCRIPT_PATH" ]; then
+    CONTEXT_EST=$(python3 - "$TRANSCRIPT_PATH" <<'PYEOF' 2>/dev/null
+import json, sys
+last = 0
+with open(sys.argv[1]) as f:
+    for line in f:
+        try:
+            u = (json.loads(line).get("message") or {}).get("usage")
+        except Exception:
+            continue
+        if u and "input_tokens" in u:
+            last = (u.get("input_tokens", 0)
+                    + u.get("cache_read_input_tokens", 0)
+                    + u.get("cache_creation_input_tokens", 0))
+print(last)
+PYEOF
+)
+    CONTEXT_EST=${CONTEXT_EST:-0}
+fi
+OVER_CAP=0
+if [ "$CONTEXT_EST" -ge "$CAP_TOKENS" ] 2>/dev/null; then
+    now=$(date +%s)
+    compact_ts=$(cat "$STATE_DIR/last_compact_ts" 2>/dev/null || echo 0)
+    nudge_ts=$(cat "$STATE_DIR/last_capnudge_ts" 2>/dev/null || echo 0)
+    if [ $(( now - compact_ts )) -ge "$NUDGE_INTERVAL_S" ] && [ $(( now - nudge_ts )) -ge "$NUDGE_INTERVAL_S" ]; then
+        OVER_CAP=1
+    fi
+fi
+
+if [ "$OVER_CAP" -eq 1 ]; then
+    echo "$(date +%s)" > "$STATE_DIR/last_capnudge_ts"
+    echo "$EXCHANGE_COUNT" > "$LAST_SAVE_FILE"
+    K=$(( CONTEXT_EST / 1000 ))
+    CAPK=$(( CAP_TOKENS / 1000 ))
+    python3 - "$K" "$CAPK" <<'PYEOF'
+import json, sys
+k, capk = sys.argv[1], sys.argv[2]
+print(json.dumps({
+  "decision": "block",
+  "reason": ("CONTEXT BOUNDARY: the turn is over and live context is %sk tokens "
+             "(soft cap %sk). FIRST save all unsaved state, decisions, quotes and "
+             "any friction lessons to memory now. THEN end with one short line "
+             "telling the user this is a natural boundary and recommending /compact. "
+             "Do not start new work.") % (k, capk)
+}))
+PYEOF
+    exit 0
+fi
+
 # Time to save?
 if [ "$SINCE_LAST" -ge "$SAVE_INTERVAL" ] && [ "$EXCHANGE_COUNT" -gt 0 ]; then
     # Update last save point

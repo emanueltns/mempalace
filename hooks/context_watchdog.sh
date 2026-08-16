@@ -16,12 +16,21 @@
 # autoCompactWindow to 250000 and those sessions compact unattended. That file
 # is the enforcement; this hook stays advisory. See feedback_enforce_dont_remind.
 #
-# CAVEAT, measured 2026-08-16: in `claude -p` print mode the PreCompact hook does
-# NOT fire, so mempal_precompact_hook.sh never runs on the phone path: no memory
-# save and no raw transcript backup before a voice session compacts. It also
-# means last_compact_ts is never stamped there, so the GRACE_S check below can
-# never apply to voice sessions. Only SessionStart:startup and
-# SessionStart:compact fire in print mode.
+# PHONE PATH, re-measured 2026-08-16: mempal_precompact_hook.sh never ran on the
+# voice path because PreCompact is registered in /root/.claude/settings.local.json,
+# which is the PROJECT-LOCAL file for the /root project. Voice turns run with cwd
+# /root/voicebridge-home, so Claude Code never loads it there. Proof: the Stop hook
+# registered in that same file logs one line per session and covers 220 of 240
+# /root transcripts but 0 of 95 voice transcripts. (Whether print mode ALSO
+# suppresses PreCompact is untested; it is not needed to explain the absence.)
+# FIXED by registering the hook on SessionStart matcher "compact" in
+# /root/voicebridge-home/.claude/settings.json, which is probe-verified as loaded
+# on that path. It fires AFTER compaction, but the transcript .jsonl never shrinks
+# (voice session 9c101849 kept all 875 pre-compaction lines behind its
+# compact_boundary), so the raw backup is still complete and last_compact_ts is
+# now stamped on the phone path, making the GRACE_S check below apply there too.
+# The matcher must stay "compact": voice turns are one-shot runs, so an
+# all-sources matcher would copy a multi-MB transcript on every single turn.
 #
 # Estimate = transcript bytes / BYTES_PER_TOKEN (calibrated ~9.7 on 2026-07-02:
 # 5.9MB transcript == ~607k context tokens). Rough on purpose; a nudge only.

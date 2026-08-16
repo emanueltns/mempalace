@@ -4,9 +4,24 @@
 # Enforces the "keep the interactive session lean" preference: when the estimated
 # context passes a soft cap, it injects a one-line nudge telling the assistant to
 # make sure memory is saved and recommend /compact (or /clear at a boundary).
-# A NUDGE, not a hard gate -- hooks cannot run /compact themselves, and Claude
-# Code exposes no custom compact threshold (built-in auto-compact only fires near
-# the ~1M hard limit). See memory feedback_enforce_dont_remind.
+# A NUDGE, not a hard gate: hooks cannot run /compact themselves. It is aimed at
+# INTERACTIVE terminal sessions, the only place a human can type /compact.
+#
+# The cap IS enforceable since Claude Code 2.1.233, which takes a custom
+# auto-compact threshold three ways: the `autoCompactWindow` setting (settings
+# .json, accepts 100k-1M), the CLAUDE_CODE_AUTO_COMPACT_WINDOW env var, or the
+# --autocompact flag. Compaction arms near 88% of that window, not at it.
+# Phone/voice turns are one-shot `claude -p --resume` runs with cwd
+# /root/voicebridge-home, so /root/voicebridge-home/.claude/settings.json pins
+# autoCompactWindow to 250000 and those sessions compact unattended. That file
+# is the enforcement; this hook stays advisory. See feedback_enforce_dont_remind.
+#
+# CAVEAT, measured 2026-08-16: in `claude -p` print mode the PreCompact hook does
+# NOT fire, so mempal_precompact_hook.sh never runs on the phone path: no memory
+# save and no raw transcript backup before a voice session compacts. It also
+# means last_compact_ts is never stamped there, so the GRACE_S check below can
+# never apply to voice sessions. Only SessionStart:startup and
+# SessionStart:compact fire in print mode.
 #
 # Estimate = transcript bytes / BYTES_PER_TOKEN (calibrated ~9.7 on 2026-07-02:
 # 5.9MB transcript == ~607k context tokens). Rough on purpose; a nudge only.

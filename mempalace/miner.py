@@ -38,6 +38,12 @@ READABLE_EXTENSIONS = {
     ".csv",
     ".sql",
     ".toml",
+    ".kt",
+    ".kts",
+    ".xml",
+    ".aidl",
+    ".gradle",
+    ".swift",
 }
 
 SKIP_DIRS = {
@@ -64,6 +70,7 @@ SKIP_DIRS = {
     ".eggs",
     "htmlcov",
     "target",
+    "graphify-out",
 }
 
 SKIP_FILENAMES = {
